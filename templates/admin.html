@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Panel</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/admin.css">
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+
+    <style>
+        .navbar {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background-color: #333;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .navbar a {
+            color: white;
+            text-decoration: none;
+            padding: 14px 20px;
+            text-align: center;
+            display: block;
+        }
+        .navbar a:hover {
+            background-color: #ddd;
+            color: black;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        h2 {
+            margin-top: 80px;
+        }
+        .buttons button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        .buttons button:hover {
+            background-color: #ddd;
+        }
+        #map {
+            height: 500px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <a href="/">Home</a>
+        <a href="/user/login">User Login</a>
+        <a href="/user/signup">User Signup</a>
+        <a href="/admin/login">Admin Login</a>
+    </div>
+
+    <h2>Admin Panel</h2>
+
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Last Location</th>
+                <th>Timestamp</th>
+                <th>Infection Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.username }}</td>
+                <td>
+                    {% set user_location = user_locations | selectattr('username', 'equalto', user.username) | first %}
+                    {% if user_location %}
+                        {{ user_location.latitude }}, {{ user_location.longitude }}
+                    {% else %}
+                        No location available
+                    {% endif %}
+                </td>
+                <td>
+                    {% if user_location %}
+                        {{ user_location.timestamp }}
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </td>
+                <td>
+                    {% if user.is_infected %}
+                        Infected
+                    {% elif user.is_suspiciously_infected %}
+                        Suspiciously Infected
+                    {% else %}
+                        Uninfected
+                    {% endif %}
+                </td>
+                <td>
+                    <button onclick="updateStatus({{ user.id }}, true, 'infected')">Mark Infected</button>
+                    <button onclick="updateStatus({{ user.id }}, false, 'uninfected')">Mark Uninfected</button>
+                    <button onclick="updateStatus({{ user.id }}, false, 'suspiciously infected')">Mark Suspiciously Infected</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div id="map"></div>
+
+    <script>
+        function haversine(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Radius of the Earth in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c * 1000; // Distance in meters
+        }
+
+        const map = L.map('map').setView([20, 0], 2);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        const userLocations = {{ user_locations | tojson }};
+
+        userLocations.forEach(function(user) {
+            let color;
+            if (user.is_infected) {
+                color = 'red';
+            } else if (user.is_suspiciously_infected) {
+                color = 'orange';
+            } else {
+                color = 'green';
+            }
+
+            const marker = L.circleMarker([user.latitude, user.longitude], {
+                color: color,
+                radius: 8
+            })
+            .addTo(map)
+            .bindPopup(user.username + " - " + (user.is_infected ? "Infected" : (user.is_suspiciously_infected ? "Suspiciously Infected" : "Uninfected")));
+        });
+
+        function updateStatus(userId, isInfected, status) {
+            fetch('/update_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, is_infected: isInfected, status: status })
+            }).then(response => {
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    alert("Failed to update status");
+                }
+            });
+        }
+    </script>
+</body>
+</html>
